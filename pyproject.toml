@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jobs-radar"
+version = "0.1.2"
+description = "Personalised job search pipeline: scrape, rank, and rate jobs against your resume"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.137.0",
+    "httpx>=0.28.1",
+    "loguru>=0.7.3",
+    "openai>=2.41.1",
+    "pandas>=2.0",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.1",
+    "python-dotenv>=1.2.2",
+    "python-jobspy>=1.1.82",
+    "qdrant-client[fastembed]>=1.12.1",
+    "streamlit>=1.58.0",
+    "uvicorn[standard]>=0.49.0",
+]
+
+[project.scripts]
+jobs-radar-serve = "jobs_radar.cli:serve"
+jobs-radar-ui    = "jobs_radar.cli:ui"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.0",
+    "ruff>=0.15.17",
+]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    ".env",
+    ".env.*",
+    "data/",
+    "logs/",
+    "tests/",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["jobs_radar"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
