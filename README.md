@@ -35,7 +35,7 @@ uv add jobs-radar
 Or run from source:
 
 ```bash
-git clone https://github.com/your-username/jobs-radar
+git clone https://github.com/siwa-p/jobs-radar.git
 cd jobs-radar
 uv sync
 ```
