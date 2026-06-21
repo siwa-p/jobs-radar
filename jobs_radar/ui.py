@@ -174,6 +174,18 @@ with tab3:
                 display_df["llm_rating"] = display_df["llm_rating"].apply(lambda x: "—" if x is None or (isinstance(x, float) and pd.isna(x)) else x)
             st.dataframe(display_df, use_container_width=True)
 
+            try:
+                cr = httpx.get(f"{BASE}/results/correlation", timeout=5)
+                if cr.status_code == 200:
+                    c = cr.json()
+                    st.metric(
+                        label=f"LLM vs you — Pearson r (n={c['n']})",
+                        value=c["pearson_r"],
+                        help="Correlation between LLM ratings and your ratings. Closer to 1.0 means the LLM agrees with you.",
+                    )
+            except Exception:
+                pass
+
             csvs = sorted(settings.data_dir.glob("jobs_*.csv"), reverse=True)
             if csvs:
                 st.download_button(

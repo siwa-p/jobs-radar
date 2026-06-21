@@ -81,7 +81,8 @@ def load_examples(limit_liked: int = 3, limit_disliked: int = 2, db_path: str = 
     conn.row_factory = sqlite3.Row
 
     cursor = conn.execute(
-        "SELECT * FROM job_results WHERE user_rating >= 4 ORDER BY user_rating DESC LIMIT ?",
+        "SELECT * FROM job_results WHERE user_rating >= 4 "
+        "ORDER BY (notes IS NOT NULL AND notes != '') DESC, user_rating DESC LIMIT ?",
         (limit_liked,)
     )
     liked = [
@@ -93,7 +94,8 @@ def load_examples(limit_liked: int = 3, limit_disliked: int = 2, db_path: str = 
     ]
 
     cursor = conn.execute(
-        "SELECT * FROM job_results WHERE user_rating <= 2 ORDER BY user_rating ASC LIMIT ?",
+        "SELECT * FROM job_results WHERE user_rating <= 2 "
+        "ORDER BY (notes IS NOT NULL AND notes != '') DESC, user_rating ASC LIMIT ?",
         (limit_disliked,)
     )
     disliked = [
@@ -106,6 +108,25 @@ def load_examples(limit_liked: int = 3, limit_disliked: int = 2, db_path: str = 
 
     conn.close()
     return liked, disliked
+
+
+def get_correlation(db_path: str = DB_PATH) -> dict | None:
+    conn = _get_conn(db_path)
+    cursor = conn.execute(
+        "SELECT llm_rating, user_rating FROM job_results "
+        "WHERE llm_rating IS NOT NULL AND user_rating IS NOT NULL"
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    if len(rows) < 3:
+        return None
+    import numpy as np
+    llm = np.array([r[0] for r in rows], dtype=float)
+    user = np.array([r[1] for r in rows], dtype=float)
+    r = float(np.corrcoef(llm, user)[0, 1])
+    if np.isnan(r):
+        return None
+    return {"n": len(rows), "pearson_r": round(r, 3)}
 
 
 def load_all(db_path: str = DB_PATH) -> list[dict]:

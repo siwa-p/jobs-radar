@@ -1,6 +1,7 @@
 # resume parsing and llm as a judge for job matching
 import time
 import openai
+from loguru import logger
 from pydantic import BaseModel
 from jobs_radar.models import ParsedResume, ParseResumeRequest, ParsedResumeResponse, ScrapedJob
 
@@ -54,7 +55,8 @@ async def rate_job(system_prompt: str, model: str) -> dict:
         )
         return response.choices[0].message.parsed.model_dump()
     except Exception as e:
-        return {"rating": 1, "reason": f"error: {e}"}
+        logger.warning(f"rate_job failed: {e}")
+        return {"rating": None, "reason": None}
 
 
 def build_judge_prompt(
@@ -98,5 +100,5 @@ Job:
 - Title: {job.title}
 - Company: {job.company}
 - Location: {job.location or 'N/A'}
-- Description: {job.description or 'N/A'}
+- Description: {' '.join((job.description or '').split()[:500]) or 'N/A'}
 """

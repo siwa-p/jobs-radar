@@ -5,7 +5,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException
 
 from jobs_radar.config import settings
-from jobs_radar.feedback import load_examples, load_recent, save_feedback, save_results
+from jobs_radar.feedback import get_correlation, load_examples, load_recent, save_feedback, save_results
 from jobs_radar.llm import build_judge_prompt, parse_resume, rate_job
 from jobs_radar.models import (
     FeedbackRequest,
@@ -115,6 +115,14 @@ async def recent_results():
     if not rows:
         raise HTTPException(status_code=404, detail="No results found. Run a search first.")
     return rows
+
+
+@app.get("/results/correlation")
+async def correlation():
+    result = await asyncio.to_thread(get_correlation)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Not enough rated jobs yet (need at least 3 with both LLM and user ratings).")
+    return result
 
 
 @app.post("/feedback", response_model=FeedbackResponse)
