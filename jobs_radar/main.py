@@ -25,7 +25,6 @@ logger.add("logs/jobs_radar_{time:YYYY-MM-DD}.log", rotation="1 day", retention=
 
 app = FastAPI()
 
-RANKING_ALPHA = 0.7  # weight for LLM rating vs vector score; tune when n_feedback > 25
 
 
 @app.get("/health")
@@ -109,11 +108,7 @@ async def search(request: JobSearchRequest):
         for (_, score), job, rating in zip(results, scraped, ratings)
     ]
     matches.sort(
-        key=lambda j: (
-            RANKING_ALPHA * (j.llm_rating / 10) + (1 - RANKING_ALPHA) * (j.relevance_score or 0)
-            if j.llm_rating is not None
-            else j.relevance_score or 0
-        ),
+        key=lambda j: j.llm_rating if j.llm_rating is not None else j.relevance_score or 0,
         reverse=True,
     )
 

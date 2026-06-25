@@ -48,7 +48,7 @@ class ScrapedJob(BaseModel):
 class JobMatch(BaseModel):
     job_url: str | None = None
     title: str
-    company: str
+    company: str | None = None
     location: str | None = None
     description: str | None = None
     date_posted: date | None = None
