@@ -46,12 +46,12 @@ def scrape_parallel(locations, queries, hours_old=24, site_name="indeed", max_wo
 
 
 def dedup(jobs):
-    df = pd.DataFrame(jobs)
-    before_dedup = len(df)
-    df.drop_duplicates(subset=["job_url"], inplace=True)
-    after_dedup = len(df)
+    jobs_df = pd.DataFrame(jobs)
+    before_dedup = len(jobs_df)
+    jobs_df.drop_duplicates(subset=["job_url"], inplace=True)
+    after_dedup = len(jobs_df)
     logger.info(f"Deduplicated jobs: {before_dedup} -> {after_dedup}")
-    return df.to_dict(orient="records")
+    return jobs_df.to_dict(orient="records")
 
 
 def tag_jobs(jobs):
@@ -97,7 +97,8 @@ def validate_jobs(jobs):
     valid, invalid = [], []
     for job in jobs:
         try:
-            valid.append(ScrapedJob(**job).model_dump())
+            cleaned = {k: (None if isinstance(v, float) and pd.isna(v) else v) for k, v in job.items()}
+            valid.append(ScrapedJob(**cleaned).model_dump())
         except Exception as e:
             logger.warning(f"Skipping invalid job '{job.get('title', '?')}' @ '{job.get('company', '?')}': {e}")
             invalid.append(job)

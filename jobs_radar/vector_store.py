@@ -2,7 +2,6 @@
 from loguru import logger
 from fastembed import TextEmbedding, SparseTextEmbedding
 from qdrant_client import QdrantClient, models
-from jobs_radar.models import SearchFilters
 
 COLLECTION   = "jobs"
 DENSE_MODEL  = "BAAI/bge-small-en-v1.5"
@@ -12,15 +11,15 @@ DENSE_SIZE   = 384
 _dense_model: TextEmbedding | None = None
 _sparse_model: SparseTextEmbedding | None = None
 
-
-def _dense() -> TextEmbedding:
+# lazy initialization saves memory and computation time at startup
+def _dense() -> TextEmbedding: # semantic similarity
     global _dense_model
     if _dense_model is None:
         _dense_model = TextEmbedding(DENSE_MODEL)
     return _dense_model
 
 
-def _sparse() -> SparseTextEmbedding:
+def _sparse() -> SparseTextEmbedding: # keyword matching
     global _sparse_model
     if _sparse_model is None:
         _sparse_model = SparseTextEmbedding(SPARSE_MODEL)
@@ -87,17 +86,20 @@ def upsert_jobs(client: QdrantClient, jobs: list[dict]):
     logger.info(f"Upserted {len(points)} jobs into collection '{COLLECTION}'.")
 
 
-def search_jobs(client: QdrantClient, query: str, limit: int = 100, filters: SearchFilters = None) -> list[tuple[dict, float]]:
-    filters = filters or SearchFilters()
+def search_jobs(
+    client: QdrantClient, query: str, limit: int = 100,
+    entry_level_only: bool = True, remote_only: bool = True,
+    exclude_senior: bool = True, exclude_clearance: bool = True,
+) -> list[tuple[dict, float]]:
     must, must_not = [], []
 
-    if filters.entry_level_only:
+    if entry_level_only:
         must.append(models.FieldCondition(key="is_entry_level", match=models.MatchValue(value=True)))
-    if filters.remote_only:
+    if remote_only:
         must.append(models.FieldCondition(key="is_remote", match=models.MatchValue(value=True)))
-    if filters.exclude_senior:
+    if exclude_senior:
         must_not.append(models.FieldCondition(key="is_senior", match=models.MatchValue(value=True)))
-    if filters.exclude_clearance:
+    if exclude_clearance:
         must_not.append(models.FieldCondition(key="has_clearance", match=models.MatchValue(value=True)))
 
     exclusion_filter = models.Filter(must=must, must_not=must_not)

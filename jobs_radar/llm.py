@@ -3,7 +3,7 @@ import time
 import openai
 from loguru import logger
 from pydantic import BaseModel
-from jobs_radar.models import ParsedResume, ParseResumeRequest, ParsedResumeResponse, ScrapedJob
+from jobs_radar.models import ParsedResume, ParsedResumeResponse, ScrapedJob
 
 _client: openai.AsyncOpenAI | None = None
 
@@ -23,15 +23,15 @@ class _Rating(BaseModel):
     reason: str
 
 
-async def parse_resume(request: ParseResumeRequest) -> ParsedResumeResponse:
+async def parse_resume(resume_text: str, model: str) -> ParsedResumeResponse:
     start = time.perf_counter()
     response = await _get_client().beta.chat.completions.parse(
-        model=request.model,
+        model=model,
         temperature=0,
         response_format=ParsedResume,
         messages=[
             {"role": "system", "content": "Extract structured resume information. Return only the JSON."},
-            {"role": "user", "content": request.resume_text},
+            {"role": "user", "content": resume_text},
         ],
     )
     return ParsedResumeResponse(

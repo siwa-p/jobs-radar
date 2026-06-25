@@ -107,12 +107,10 @@ with tab2:
                 "locations": locations,
                 "hours_old": hours_old,
                 "top_k": top_k,
-                "filters": {
-                    "entry_level_only": entry_level_only,
-                    "remote_only": remote_only,
-                    "exclude_senior": exclude_senior,
-                    "exclude_clearance": exclude_clearance,
-                },
+                "entry_level_only": entry_level_only,
+                "remote_only": remote_only,
+                "exclude_senior": exclude_senior,
+                "exclude_clearance": exclude_clearance,
             }
             with st.spinner("Scraping jobs... this may take a minute."):
                 try:

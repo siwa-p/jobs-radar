@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from datetime import date
 
 
@@ -12,22 +12,10 @@ class ParsedResume(BaseModel):
     summary: str | None = None
 
 
-class ParseResumeRequest(BaseModel):
-    resume_text: str
-    model: str
-
-
 class ParsedResumeResponse(BaseModel):
     parsed_resume: ParsedResume
     model_used: str
     parsing_time_seconds: float
-
-
-class SearchFilters(BaseModel):
-    entry_level_only: bool = True
-    remote_only: bool = True
-    exclude_senior: bool = True
-    exclude_clearance: bool = True
 
 
 class JobSearchRequest(BaseModel):
@@ -35,15 +23,18 @@ class JobSearchRequest(BaseModel):
     model: str = "gpt-4o-mini"
     queries: list[str]
     locations: list[str]
-    filters: SearchFilters = SearchFilters()
-    hours_old: int | None = Field(default=24, ge=1, le=168)
-    top_k: int = Field(default=10, ge=1, le=100)
+    hours_old: int = 24
+    top_k: int = 10
+    entry_level_only: bool = True
+    remote_only: bool = True
+    exclude_senior: bool = True
+    exclude_clearance: bool = True
 
 
 class ScrapedJob(BaseModel):
     job_url: str
     title: str
-    company: str
+    company: str | None = None
     location: str | None = None
     description: str | None = None
     date_posted: date | None = None
@@ -78,15 +69,13 @@ class FeedbackEntry(BaseModel):
     job_url: str
     title: str
     company: str
-    rating: int = Field(ge=1, le=5)
+    rating: int
     notes: str = ""
 
 
 class FeedbackRequest(BaseModel):
     job_url: str
-    user_rating: int = Field(ge=1, le=5)
+    user_rating: int
     notes: str = ""
 
 
-class FeedbackResponse(BaseModel):
-    saved: bool

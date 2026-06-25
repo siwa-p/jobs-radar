@@ -93,7 +93,23 @@ All settings are read from environment variables or a `.env` file:
 | POST | `/parse` | Parse resume text → structured profile |
 | POST | `/search` | Scrape, embed, rank, and rate jobs |
 | GET | `/results/recent` | Load the most recent search results |
-| POST | `/feedback` | Save user rating for a job |
+| GET | `/results/correlation` | Pearson r between LLM ratings and user ratings |
+| POST | `/feedback` | Save user rating and notes for a job |
+
+**`/search` request body:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `queries` | `list[str]` | — | Job titles to search |
+| `locations` | `list[str]` | — | Locations to search |
+| `parsed_resume` | object | `null` | Structured resume (required for LLM rating) |
+| `model` | `str` | `gpt-4o-mini` | OpenAI model for LLM rating |
+| `hours_old` | `int` | `24` | How far back to search (max 168) |
+| `top_k` | `int` | `10` | Max results to return |
+| `entry_level_only` | `bool` | `true` | Filter to entry-level jobs |
+| `remote_only` | `bool` | `true` | Filter to remote jobs |
+| `exclude_senior` | `bool` | `true` | Exclude senior-tagged jobs |
+| `exclude_clearance` | `bool` | `true` | Exclude clearance-required jobs |
 
 ## Project Structure
 
@@ -110,6 +126,27 @@ jobs_radar/
   ui.py            # Streamlit UI
 tests/             # pytest suite (54 tests)
 ```
+
+## Pipeline
+
+Each search runs this chain before results hit the vector store:
+
+```
+scrape → dedup → tag_jobs → tag_experience → validate_jobs → upsert → vector search → LLM rating
+```
+
+| Step | What it does |
+|------|-------------|
+| `scrape` | Fetches raw job listings from Indeed for each query/location pair |
+| `dedup` | Removes duplicate listings by `job_url` |
+| `tag_jobs` | Adds `is_senior`, `is_entry_level`, `is_remote`, `has_clearance` via regex on title and description |
+| `tag_experience` | Parses `experience_required` from phrases like "5+ years" in the description |
+| `validate_jobs` | Coerces dicts into `ScrapedJob` Pydantic models; sets boolean defaults to `False` if regex found nothing |
+| `upsert` | Embeds title+description with dense (BGE) and sparse (BM25) models; writes vectors + payload to Qdrant |
+| `vector search` | Hybrid RRF search returns top-k candidates with a relevance score |
+| `LLM rating` | Each result is scored 1–10 against the candidate's resume via `gpt-4o-mini` |
+
+The scraper provides `title`, `company`, `location`, `job_url`, `date_posted`, `description`. The tagging steps add everything else before upsert.
 
 ## Data Model
 
@@ -129,3 +166,18 @@ Re-running a search updates system fields for any URL already in the DB while pr
 
 - Qdrant runs in-memory — the vector index is not persisted between server restarts. The SQLite DB and CSV exports are the durable layer.
 - fastembed downloads model weights on the first `upsert_jobs` call (~30–60s). Subsequent calls are fast.
+
+## Pydantic — Role in This Project
+
+Three jobs Pydantic is doing here:
+
+**1. API contract enforcement**
+`JobSearchRequest`, `FeedbackRequest`, `SearchResponse` etc. — FastAPI reads the request body and automatically validates it against the model. Wrong type, missing field, out-of-range value → 422 before your code even runs. No manual validation checks needed.
+
+**2. Structured LLM output**
+`ParsedResume`, `_Rating` — passed as `response_format` to OpenAI's structured outputs API. Forces the LLM to return valid JSON that matches the schema exactly, rather than free text you'd have to parse and validate yourself.
+
+**3. Internal type safety**
+`ScrapedJob`, `JobMatch` — typed containers moving data through the pipeline. `ScrapedJob(**payload)` at search time is the validation step that ensures the Qdrant payload is consistent with what the rest of the code expects.
+
+**The common thread:** Pydantic sits at every boundary — between HTTP client and server, between LLM and application code, between Qdrant and the pipeline. Anywhere untrusted or unstructured data enters, a Pydantic model is the gate.

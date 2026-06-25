@@ -1,18 +1,18 @@
 import asyncio
 import time
 from datetime import datetime
+from pathlib import Path
 import pandas as pd
 from fastapi import FastAPI, HTTPException
+from loguru import logger
 
 from jobs_radar.config import settings
 from jobs_radar.feedback import get_correlation, load_examples, load_recent, save_feedback, save_results
 from jobs_radar.llm import build_judge_prompt, parse_resume, rate_job
 from jobs_radar.models import (
     FeedbackRequest,
-    FeedbackResponse,
     JobMatch,
     JobSearchRequest,
-    ParseResumeRequest,
     ParsedResumeResponse,
     ScrapedJob,
     SearchResponse,
@@ -20,7 +20,12 @@ from jobs_radar.models import (
 from jobs_radar.pipeline import dedup, scrape_parallel, tag_experience, tag_jobs, validate_jobs
 from jobs_radar.vector_store import make_client, search_jobs, setup_collection, upsert_jobs
 
+Path("logs").mkdir(exist_ok=True)
+logger.add("logs/jobs_radar_{time:YYYY-MM-DD}.log", rotation="1 day", retention="7 days")
+
 app = FastAPI()
+
+RANKING_ALPHA = 0.7  # weight for LLM rating vs vector score; tune when n_feedback > 25
 
 
 @app.get("/health")
@@ -29,10 +34,10 @@ async def health():
 
 
 @app.post("/parse", response_model=ParsedResumeResponse)
-async def parse(request: ParseResumeRequest):
+async def parse(body: dict):
     if not settings.openai_api_key:
         raise HTTPException(status_code=503, detail="LLM features require OPENAI_API_KEY")
-    return await parse_resume(request)
+    return await parse_resume(body["resume_text"], body["model"])
 
 
 @app.post("/search", response_model=SearchResponse)
@@ -65,7 +70,13 @@ async def search(request: JobSearchRequest):
         query = " ".join(request.parsed_resume.target_roles + request.parsed_resume.core_skills)
     else:
         query = " ".join(request.queries)
-    results = search_jobs(qdrant, query, limit=request.top_k, filters=request.filters)
+    results = search_jobs(
+        qdrant, query, limit=request.top_k,
+        entry_level_only=request.entry_level_only,
+        remote_only=request.remote_only,
+        exclude_senior=request.exclude_senior,
+        exclude_clearance=request.exclude_clearance,
+    )
 
     if not results:
         return SearchResponse(
@@ -97,7 +108,14 @@ async def search(request: JobSearchRequest):
         )
         for (_, score), job, rating in zip(results, scraped, ratings)
     ]
-    matches.sort(key=lambda j: (j.llm_rating or 0, j.relevance_score or 0), reverse=True)
+    matches.sort(
+        key=lambda j: (
+            RANKING_ALPHA * (j.llm_rating / 10) + (1 - RANKING_ALPHA) * (j.relevance_score or 0)
+            if j.llm_rating is not None
+            else j.relevance_score or 0
+        ),
+        reverse=True,
+    )
 
     await asyncio.to_thread(save_results, matches, ts)
 
@@ -125,7 +143,7 @@ async def correlation():
     return result
 
 
-@app.post("/feedback", response_model=FeedbackResponse)
+@app.post("/feedback")
 async def feedback(request: FeedbackRequest):
     await asyncio.to_thread(save_feedback, request.job_url, request.user_rating, request.notes)
-    return FeedbackResponse(saved=True)
+    return {"saved": True}
